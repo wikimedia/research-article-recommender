@@ -1,2 +1,2 @@
 # research-translation-recommendation-models
-scripts used in building models thta suggesting translation recommendations
+scripts used in building models that suggest translation recommendations
