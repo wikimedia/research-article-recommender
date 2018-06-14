@@ -27,28 +27,31 @@ if source_wiki not in wikipedias or target_wiki not in wikipedias:
     print("Either source or target language Wikipedia doesn't exist.")
     exit(1)
 
-spark = SparkSession\
+spark_session = SparkSession\
     .builder\
     .appName("TranslationRecommendation")\
     .getOrCreate()
-sql_context = SQLContext(spark.sparkContext)
-hive_context = HiveContext(spark.sparkContext)
-
+sql_context = SQLContext(spark_session.sparkContext)
+hive_context = HiveContext(spark_session.sparkContext)
+print('---> Started a Spark session')
 
 # Get Wikidata items.
-wikidata = sql_context\
+wikidata = spark_session\
     .read\
-    .parquet('/user/joal/wikidata/parquet')\
+    .parquet('hdfs://analytics-hadoop/user/joal/wikidata/parquet')\
     .select('id', F.explode('siteLinks').alias('sl'))\
     .select('id', 'sl.site', 'sl.title')
+print('---> Read Wikidata parquet')
 
 # Wikidata sitelinks
 sitelinks = wikidata.groupBy('id').count()
+print('---> Got wikidata sitelinks')
 
 # Get articles in the main namespace for the language pair.
 articles = wikidata\
     .where((F.col('site') == source_wiki) | (F.col('site') == target_wiki))\
     .filter(~F.col('title').contains(':'))
+print('---> Got articles titles for the source and target languages')
 
 # Get pageviews for the target language over the last 6 months.
 end = date.today()
@@ -67,12 +70,15 @@ sql = """
 target_pageviews = hive_context.sql(
     sql % (end.year, end.month, start.year, start.month,
            source_lang))
+print('---> Queried target pageviews')
+
 # Normalize pageviews
 target_article_count = target_pageviews.count()
 target_pageviews = target_pageviews.withColumn(
     'normalized_rank',
     (F.col('pageviews') / target_article_count)
 )
+print('---> Computed normalized ranks for target pageviews')
 
 # Get common and source only articles
 source_wikidata_ids = articles\
@@ -97,6 +103,7 @@ common_articles = common_wikidata_ids\
     .join(target_articles.alias('a'),
           F.col('c.id') == F.col('a.wikidata_id'))\
     .select('a.*')
+print('---> Computed common articles between the target and source languages')
 
 # Train a model
 vector_assembler = VectorAssembler(
@@ -109,6 +116,7 @@ rf = RandomForestRegressor(
     featuresCol="features", labelCol="normalized_rank")
 pipeline = Pipeline(stages=[rf])
 model = pipeline.fit(train_data)
+print('---> Trained a model')
 
 # Predict missing data
 source_only_wikidata_ids = source_wikidata_ids.subtract(common_wikidata_ids)
@@ -125,19 +133,19 @@ prediction_data = vector_assembler\
     .transform(source_articles)\
     .select(['features'])
 predictions = model.transform(prediction_data)
+print('---> Made predictions')
 
+# Save predictions to a file
 source_articles = source_articles\
     .withColumn("row_number", F.monotonically_increasing_id())
 predictions = predictions\
     .withColumn("row_number", F.monotonically_increasing_id())
-
 predictions = source_articles\
     .alias('s')\
     .join(predictions.alias('p'),
           F.col('s.row_number') == F.col('p.row_number'))\
     .select([F.col('s.wikidata_id'),
              F.col('p.prediction').alias('normalized_rank')])
-
 predictions_filename = '%s-%s_%d_%d-%d_%d.tsv' % (
     source_wiki, target_wiki, start.year, start.month,
     end.year, end.month
@@ -145,6 +153,6 @@ predictions_filename = '%s-%s_%d_%d-%d_%d.tsv' % (
 predictions\
     .toPandas()\
     .to_csv(predictions_filename, sep='\t', index=False)
-print('Saved predictions to %s' % predictions_filename)
+print('---> Saved predictions to %s' % predictions_filename)
 
-spark.stop()
+spark_session.stop()
