@@ -3,13 +3,10 @@ from datetime import date, timedelta
 import sys
 
 import pandas as pd
-from pyspark.sql import SparkSession
-from pyspark import SQLContext
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.regression import RandomForestRegressor
-from pyspark.sql import HiveContext
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, SparkSession
 
 # TODO don't hardcode paths, dates, etc.
 
@@ -27,18 +24,22 @@ if source_wiki not in wikipedias or target_wiki not in wikipedias:
     print("Either source or target language Wikipedia doesn't exist.")
     exit(1)
 
-spark_session = SparkSession\
-    .builder\
-    .appName("TranslationRecommendation")\
+
+spark = SparkSession.builder\
+    .master('yarn')\
+    .appName('translation-recommendation')\
+    .config('spark.executor.memory', '8G')\
+    .config('spark.cores.max', '4')\
+    .config('spark.driver.memory', '8G')\
+    .config("spark.driver.maxResultSize", "8G")\
+    .enableHiveSupport()\
     .getOrCreate()
-sql_context = SQLContext(spark_session.sparkContext)
-hive_context = HiveContext(spark_session.sparkContext)
 print('---> Started a Spark session')
 
 # Get Wikidata items.
-wikidata = spark_session\
+wikidata = spark\
     .read\
-    .parquet('hdfs://analytics-hadoop/user/joal/wikidata/parquet')\
+    .parquet('/user/joal/wikidata/parquet')\
     .select('id', F.explode('siteLinks').alias('sl'))\
     .select('id', 'sl.site', 'sl.title')
 print('---> Read Wikidata parquet')
@@ -67,7 +68,7 @@ sql = """
     GROUP BY page_title
     ORDER BY pageviews
 """
-target_pageviews = hive_context.sql(
+target_pageviews = spark.sql(
     sql % (end.year, end.month, start.year, start.month,
            source_lang))
 print('---> Queried target pageviews')
@@ -155,4 +156,4 @@ predictions\
     .to_csv(predictions_filename, sep='\t', index=False)
 print('---> Saved predictions to %s' % predictions_filename)
 
-spark_session.stop()
+spark.stop()
