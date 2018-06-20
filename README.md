@@ -8,7 +8,9 @@ Suggest Wikipedia articles for translation: https://arxiv.org/abs/1604.03235
 ## How to run
 0. ssh stat1005
 1. clone this repo and cd into it
-2. Run: `PYSPARK_DRIVER_PYTHON=python2 spark2-submit train.py ru uz`
+2. Generate top 50 Wikipedias by article count:
+   `python topsites.py 05/31/2018 > topsites.tsv`
+3. Run: `PYSPARK_DRIVER_PYTHON=python2 spark2-submit train.py ru uz`
 
    Here `ru` is the source language and `uz` is the target language. The
    script will create a prediction file (tsv) in the current directory.
