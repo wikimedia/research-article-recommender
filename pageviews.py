@@ -30,7 +30,7 @@ wikidata = spark\
     .read\
     .parquet('/user/joal/wikidata/parquet')\
     .select('id', F.explode('siteLinks').alias('sl'))\
-    .select('id', 'sl.site', 'sl.title')
+    .select(F.col('id').alias('%s_id' % lang), 'sl.site', 'sl.title')
 print('---> Read Wikidata parquet')
 
 # Get articles in the main namespace for the language pair.
@@ -41,7 +41,7 @@ print('---> Got articles titles for the wiki')
 
 start_date = end_date - timedelta(days=180)
 sql = """
-    SELECT page_title, sum(view_count) as pageviews
+    SELECT page_title AS %s_title, sum(view_count) as %s_pageviews
     FROM wmf.pageview_hourly
     WHERE
         ((year = %d AND month < %d) OR (year = %d AND month >= %d))
@@ -49,26 +49,28 @@ sql = """
         AND agent_type="user"
         AND instr(page_title, ':')=0
     GROUP BY page_title
-    ORDER BY pageviews
+    ORDER BY %s_pageviews
 """
 pageviews = spark.sql(
-    sql % (end_date.year, end_date.month, start_date.year,
-           start_date.month, lang))
+    sql % (lang, lang, end_date.year, end_date.month, start_date.year,
+           start_date.month, lang, lang))
 print('---> Queried target pageviews')
 
 target_article_count = pageviews.count()
 # Normalize pageviews
 pageviews = pageviews\
-    .withColumn('normalized_rank', F.col('pageviews') / target_article_count)\
-    .withColumn('log_rank', F.log(F.col('pageviews')))
+    .withColumn('%s_normalized_rank' % lang,
+                F.col('%s_pageviews' % lang) / target_article_count)\
+    .withColumn('%s_log_rank' % lang,
+                F.log(F.col('%s_pageviews' % lang)))
 
 pageviews = pageviews\
     .alias('p')\
-    .join(articles.alias('a'), F.col('a.title') == F.col('p.page_title'))
+    .join(articles.alias('a'), F.col('a.title') == F.col('p.%s_title' % lang))
 
-pageviews = pageviews.drop('page_title')
+pageviews = pageviews.drop('title').drop('site')
 
 pageviews.write.parquet(
     "/user/bmansurov/%s-pageviews-%s-%s.parquet" %
-    wiki, start_date.strftime('%m%d%Y'), end_date.strftime('%m%d%Y'))
+    (wiki, start_date.strftime('%m%d%Y'), end_date.strftime('%m%d%Y')))
 print('---> Saved %s pageviews to as a parquet.' % wiki)

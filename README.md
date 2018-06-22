@@ -12,7 +12,9 @@ Suggest Wikipedia articles for translation: https://arxiv.org/abs/1604.03235
    `python topsites.py 05/31/2018 > topsites.tsv`
 3. For each top site, calculate pageviews:
    `PYSPARK_DRIVER_PYTHON=python2 spark2-submit pageviews.py uz 05/31/2018`
-4. Run: `PYSPARK_DRIVER_PYTHON=python2 spark2-submit train.py ru uz`
+4. Combine pageviews into one file:
+   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit combined_pageviews.py 05/31/2018`
+5. Run: `PYSPARK_DRIVER_PYTHON=python2 spark2-submit train.py ru uz`
 
    Here `ru` is the source language and `uz` is the target language. The
    script will create a prediction file (tsv) in the current directory.
