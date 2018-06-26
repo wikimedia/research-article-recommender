@@ -14,7 +14,11 @@ Suggest Wikipedia articles for translation: https://arxiv.org/abs/1604.03235
    `PYSPARK_DRIVER_PYTHON=python2 spark2-submit topsites_pageviews.py 05/31/2018`
 4. Combine pageviews into a single data frame:
    `PYSPARK_DRIVER_PYTHON=python2 spark2-submit combined_pageviews.py 05/31/2018`
-5. Run: `PYSPARK_DRIVER_PYTHON=python2 spark2-submit train.py ru uz`
+5. Get the top 10 language pairs from ContentTranslation:
+   `echo "USE wikishared; SELECT translation_source_language, translation_target_language, count(translation_id) as count FROM cx_translations WHERE translation_status='published' GROUP BY translation_source_language, translation_target_language ORDER BY count DESC LIMIT 10;" | mysql -h analytics-store.eqiad.wmnet -A > language_pairs.txt`
+6. Make predictions for the language pairs from ContentTranslation:
+   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit train.py ru uz`
+
    Here `ru` is the source language and `uz` is the target language. The
    script will create a prediction file (tsv) in the current directory.
    The file will looks something like this:
