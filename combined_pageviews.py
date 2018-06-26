@@ -50,7 +50,9 @@ for lang in top_wikipedias:
 
     wikidata = wikidata\
         .alias('w')\
-        .join(pageviews.alias('p'), F.col('w.id') == F.col('p.%s_id' % lang))\
+        .join(pageviews.alias('p'),
+              F.col('w.id') == F.col('p.%s_id' % lang),
+              'left_outer')\
         .na.fill({
             '%s_pageviews' % lang: 0,
             '%s_normalized_rank' % lang: 0,
