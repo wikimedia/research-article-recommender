@@ -61,8 +61,9 @@ print('---> Got articles titles for the source and target languages')
 # Get pageviews for the target language over the last 6 months.
 target_pageviews = spark\
     .read\
-    .parquet('%suzwiki-pageviews-%s-%s.parquet' %
+    .parquet('%s%swiki-pageviews-%s-%s.parquet' %
              (BASE_DIR,
+              target_lang,
               start_date.strftime('%m%d%Y'),
               end_date.strftime('%m%d%Y')))
 print('---> Read target pageviews parquet')

@@ -11,13 +11,13 @@ Suggest Wikipedia articles for translation: https://arxiv.org/abs/1604.03235
 2. Generate top 50 Wikipedias by article count:
    `python topsites.py 05/31/2018 > topsites.tsv`
 3. For each top site, calculate pageviews:
-   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit topsites_pageviews.py 05/31/2018`
+   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit --master yarn --executor-memory 32G --executor-cores 4 --driver-memory 32G --conf spark.driver.maxResultSize=32G topsites_pageviews.py 05/31/2018`
 4. Combine pageviews into a single data frame:
-   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit combined_pageviews.py 05/31/2018`
+   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit --master yarn --executor-memory 32G --executor-cores 4 --driver-memory 32G --conf spark.driver.maxResultSize=32G combined_pageviews.py 05/31/2018`
 5. Get the top 10 language pairs from ContentTranslation:
    `echo "USE wikishared; SELECT translation_source_language, translation_target_language, count(translation_id) as count FROM cx_translations WHERE translation_status='published' GROUP BY translation_source_language, translation_target_language ORDER BY count DESC LIMIT 10;" | mysql -h analytics-store.eqiad.wmnet -A > language_pairs.txt`
 6. Make predictions for the language pairs from ContentTranslation:
-   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit train.py ru uz`
+   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit --master yarn --executor-memory 32G --executor-cores 4 --driver-memory 32G --conf spark.driver.maxResultSize=32G train.py ru uz 05/31/2018`
 
    Here `ru` is the source language and `uz` is the target language. The
    script will create a prediction file (tsv) in the current directory.
