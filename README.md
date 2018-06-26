@@ -6,16 +6,15 @@ Suggest Wikipedia articles for translation: https://arxiv.org/abs/1604.03235
 
 
 ## How to run
-0. ssh stat1005
-1. clone this repo and cd into it
+0. `ssh stat1005`
+1. Clone this repo and `cd` into it.
 2. Generate top 50 Wikipedias by article count:
    `python topsites.py 05/31/2018 > topsites.tsv`
 3. For each top site, calculate pageviews:
-   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit pageviews.py uz 05/31/2018`
-4. Combine pageviews into one file:
+   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit topsites_pageviews.py 05/31/2018`
+4. Combine pageviews into a single data frame:
    `PYSPARK_DRIVER_PYTHON=python2 spark2-submit combined_pageviews.py 05/31/2018`
 5. Run: `PYSPARK_DRIVER_PYTHON=python2 spark2-submit train.py ru uz`
-
    Here `ru` is the source language and `uz` is the target language. The
    script will create a prediction file (tsv) in the current directory.
    The file will looks something like this:

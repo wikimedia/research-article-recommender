@@ -1,5 +1,5 @@
 from __future__ import division
-from datetime import date, timedelta
+from datetime import datetime, timedelta
 import sys
 
 import pandas as pd
@@ -9,21 +9,25 @@ from pyspark.ml.regression import RandomForestRegressor
 from pyspark.sql import functions as F, SparkSession
 
 # TODO don't hardcode paths, dates, etc.
+BASE_DIR = '/user/bmansurov/translation-recommendation/'
 
 # Check if we got source and target languages.
-if len(sys.argv) != 3:
-    print("Pass in source and target languages, e.g. train.py ru uz")
+if len(sys.argv) != 4:
+    print('Pass in source and target languages, along with the '
+          'end date, e.g. train.py ru uz 05/31/2018')
     exit(1)
-source_lang, target_lang = sys.argv[1:]
+source_lang, target_lang = sys.argv[1:3]
 source_wiki = '%swiki' % source_lang
 target_wiki = '%swiki' % target_lang
+
+end_date = datetime.strptime(sys.argv[3], "%m/%d/%Y").date()
+start_date = end_date - timedelta(days=180)
 
 # Check if Wikipedias in given source and target languages exist.
 wikipedias = set(pd.read_csv('wikipedia.dblist', names=['wiki'])['wiki'])
 if source_wiki not in wikipedias or target_wiki not in wikipedias:
     print("Either source or target language Wikipedia doesn't exist.")
     exit(1)
-
 
 spark = SparkSession.builder\
     .master('yarn')\
@@ -55,31 +59,13 @@ articles = wikidata\
 print('---> Got articles titles for the source and target languages')
 
 # Get pageviews for the target language over the last 6 months.
-end = date.today()
-start = end - timedelta(days=180)
-sql = """
-    SELECT page_title, sum(view_count) as pageviews
-    FROM wmf.pageview_hourly
-    WHERE
-        ((year = %d AND month < %d) OR (year = %d AND month >= %d))
-        AND project="%s.wikipedia"
-        AND agent_type="user"
-        AND instr(page_title, ':')=0
-    GROUP BY page_title
-    ORDER BY pageviews
-"""
-target_pageviews = spark.sql(
-    sql % (end.year, end.month, start.year, start.month,
-           source_lang))
-print('---> Queried target pageviews')
-
-# Normalize pageviews
-target_article_count = target_pageviews.count()
-target_pageviews = target_pageviews.withColumn(
-    'normalized_rank',
-    (F.col('pageviews') / target_article_count)
-)
-print('---> Computed normalized ranks for target pageviews')
+target_pageviews = spark\
+    .read\
+    .parquet('%suzwiki-pageviews-%s-%s.parquet' %
+             (BASE_DIR,
+              start_date.strftime('%m%d%Y'),
+              end_date.strftime('%m%d%Y')))
+print('---> Read target pageviews parquet')
 
 # Get common and source only articles
 source_wikidata_ids = articles\
@@ -94,11 +80,11 @@ target_articles = articles\
     .where(F.col('a.site') == target_wiki)\
     .join(sitelinks.alias('s'), F.col('a.id') == F.col('s.id'))\
     .join(target_pageviews.alias('t'),
-          F.col('a.title') == F.col('t.page_title'))\
+          F.col('a.title') == F.col('t.%s_title' % target_lang))\
     .select([F.col('a.id').alias('wikidata_id'),
-            F.col('a.title'),
-            F.col('s.count').alias('sitelinks_count'),
-             F.col('t.normalized_rank')])
+             F.col('a.title'),
+             F.col('s.count').alias('sitelinks_count'),
+             F.col('t.%s_normalized_rank' % target_lang).alias('output')])
 common_articles = common_wikidata_ids\
     .alias('c')\
     .join(target_articles.alias('a'),
@@ -106,15 +92,31 @@ common_articles = common_wikidata_ids\
     .select('a.*')
 print('---> Computed common articles between the target and source languages')
 
-# Train a model
-vector_assembler = VectorAssembler(
-    inputCols=['sitelinks_count'], outputCol='features')
-train_data = vector_assembler\
-    .transform(common_articles)\
-    .select(['features', 'normalized_rank'])
+# Read combined pagviews
+combined_pageviews = spark\
+    .read\
+    .parquet('%scombined-pageviews-%s-%s.parquet' %
+             (BASE_DIR,
+              start_date.strftime('%m%d%Y'),
+              end_date.strftime('%m%d%Y')))
+print('---> Read combined pageviews parquet')
 
+# Prepare training data
+input_df = common_articles\
+    .alias('c')\
+    .join(combined_pageviews.alias('cp'),
+          F.col('c.wikidata_id') == F.col('cp.id'))
+
+# Train a model
+input_cols = [x for x in combined_pageviews.columns
+              if x.endswith('_pageviews') or x.endswith('_rank')]
+input_cols.append('sitelinks_count')
+vector_assembler = VectorAssembler(inputCols=input_cols, outputCol='features')
+train_data = vector_assembler\
+    .transform(input_df)\
+    .select(['features', 'output'])
 rf = RandomForestRegressor(
-    featuresCol="features", labelCol="normalized_rank")
+    featuresCol="features", labelCol="output")
 pipeline = Pipeline(stages=[rf])
 model = pipeline.fit(train_data)
 print('---> Trained a model')
@@ -128,10 +130,14 @@ source_articles = articles\
     .select([F.col('a.id').alias('wikidata_id'),
              F.col('a.title'),
              F.col('s.count').alias('sitelinks_count')])
+output_df = source_articles\
+    .alias('c')\
+    .join(combined_pageviews.alias('cp'),
+          F.col('c.wikidata_id') == F.col('cp.id'))
 vector_assembler = VectorAssembler(
-    inputCols=['sitelinks_count'], outputCol='features')
+    inputCols=input_cols, outputCol='features')
 prediction_data = vector_assembler\
-    .transform(source_articles)\
+    .transform(output_df)\
     .select(['features'])
 predictions = model.transform(prediction_data)
 print('---> Made predictions')
@@ -147,10 +153,9 @@ predictions = source_articles\
           F.col('s.row_number') == F.col('p.row_number'))\
     .select([F.col('s.wikidata_id'),
              F.col('p.prediction').alias('normalized_rank')])
-predictions_filename = '%s-%s_%d_%d-%d_%d.tsv' % (
-    source_wiki, target_wiki, start.year, start.month,
-    end.year, end.month
-)
+predictions_filename = 'predictions-%s-%s_%s-%s.tsv' % (
+    start_date.strftime('%m%d%Y'), end_date.strftime('%m%d%Y'),
+    source_wiki, target_wiki)
 predictions\
     .toPandas()\
     .to_csv(predictions_filename, sep='\t', index=False)

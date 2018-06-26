@@ -4,6 +4,7 @@ import sys
 
 from pyspark.sql import functions as F, SparkSession
 
+BASE_DIR = '/user/bmansurov/translation-recommendation/'
 
 if len(sys.argv) != 3:
     print("Pass in language code and end date, e.g. pageviews.py uz 05/31/2018")
@@ -71,6 +72,7 @@ pageviews = pageviews\
 pageviews = pageviews.drop('title').drop('site')
 
 pageviews.write.parquet(
-    "/user/bmansurov/%s-pageviews-%s-%s.parquet" %
-    (wiki, start_date.strftime('%m%d%Y'), end_date.strftime('%m%d%Y')))
+    "%s%s-pageviews-%s-%s.parquet" %
+    (BASE_DIR, wiki, start_date.strftime('%m%d%Y'),
+     end_date.strftime('%m%d%Y')))
 print('---> Saved %s pageviews to as a parquet.' % wiki)

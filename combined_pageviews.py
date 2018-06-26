@@ -4,6 +4,7 @@ import sys
 import pandas as pd
 from pyspark.sql import functions as F, SparkSession
 
+BASE_DIR = '/user/bmansurov/translation-recommendation/'
 
 if len(sys.argv) != 2:
     print("Pass in the end date, e.g. combined_pageviews.py 05/31/2018")
@@ -38,8 +39,9 @@ for lang in top_wikipedias:
     try:
         pageviews = spark\
             .read\
-            .parquet('/user/bmansurov/%swiki-pageviews-%s-%s.parquet' %
-                     (lang,
+            .parquet('%s%swiki-pageviews-%s-%s.parquet' %
+                     (BASE_DIR,
+                      lang,
                       start_date.strftime('%m%d%Y'),
                       end_date.strftime('%m%d%Y')))
     except Exception:
@@ -57,5 +59,7 @@ for lang in top_wikipedias:
     wikidata = wikidata.drop('%s_id' % lang).drop('%s_title' % lang)
 
 wikidata.write.parquet(
-    "/user/bmansurov/combined-pageviews-%s-%s.parquet" %
-    (start_date.strftime('%m%d%Y'), end_date.strftime('%m%d%Y')))
+    "%scombined-pageviews-%s-%s.parquet" %
+    (BASE_DIR,
+     start_date.strftime('%m%d%Y'),
+     end_date.strftime('%m%d%Y')))
