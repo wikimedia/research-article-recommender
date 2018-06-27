@@ -33,6 +33,7 @@ print('---> Read Wikidata parquet')
 # Get articles in the main namespace for the language pair.
 articles = wikidata\
     .where(F.col('site') == wiki)\
+    .filter(F.col('id').startswith('Q'))\
     .filter(~F.col('title').contains(':'))
 print('---> Got articles titles for the wiki')
 
