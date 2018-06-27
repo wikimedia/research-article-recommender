@@ -55,6 +55,7 @@ print('---> Got wikidata sitelinks')
 # Get articles in the main namespace for the language pair.
 articles = wikidata\
     .where((F.col('site') == source_wiki) | (F.col('site') == target_wiki))\
+    .filter(F.col('id').startswith('Q'))\
     .filter(~F.col('title').contains(':'))
 print('---> Got articles titles for the source and target languages')
 
@@ -131,10 +132,15 @@ source_articles = articles\
     .select([F.col('a.id').alias('wikidata_id'),
              F.col('a.title'),
              F.col('s.count').alias('sitelinks_count')])
-output_df = source_articles\
+source_only_articles = source_only_wikidata_ids\
     .alias('c')\
-    .join(combined_pageviews.alias('cp'),
-          F.col('c.wikidata_id') == F.col('cp.id'))
+    .join(source_articles.alias('s'),
+          F.col('c.id') == F.col('s.wikidata_id'))\
+    .select('s.*')
+output_df = source_only_articles\
+    .alias('s')\
+    .join(combined_pageviews.alias('c'),
+          F.col('s.wikidata_id') == F.col('c.id'))
 vector_assembler = VectorAssembler(
     inputCols=input_cols, outputCol='features')
 prediction_data = vector_assembler\
