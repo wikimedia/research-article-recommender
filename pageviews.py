@@ -18,10 +18,6 @@ wiki = '%swiki' % lang
 spark = SparkSession.builder\
     .master('yarn')\
     .appName('translation-recommendation')\
-    .config('spark.executor.memory', '8G')\
-    .config('spark.cores.max', '4')\
-    .config('spark.driver.memory', '8G')\
-    .config("spark.driver.maxResultSize", "8G")\
     .enableHiveSupport()\
     .getOrCreate()
 print('---> Started a Spark session')

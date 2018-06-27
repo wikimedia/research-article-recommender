@@ -18,3 +18,4 @@ with open('language_pairs.txt', 'r') as infile:
             '--conf spark.driver.maxResultSize=32G '\
             'train.py %s %s %s' % (row[0], row[1], end_date)
         call(cmd, shell=True)
+
