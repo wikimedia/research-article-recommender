@@ -39,7 +39,7 @@ print('---> Started a Spark session')
 # Get Wikidata items.
 wikidata = spark\
     .read\
-    .parquet('/user/joal/wikidata/parquet')\
+    .parquet('/user/joal/wmf/data/wmf/mediawiki/wikidata_parquet/20180108')\
     .select('id', F.explode('siteLinks').alias('sl'))\
     .select('id', 'sl.site', 'sl.title')
 print('---> Read Wikidata parquet')
@@ -78,11 +78,12 @@ target_articles = articles\
     .where(F.col('a.site') == target_wiki)\
     .join(sitelinks.alias('s'), F.col('a.id') == F.col('s.id'))\
     .join(target_pageviews.alias('t'),
-          F.col('a.title') == F.col('t.%s_title' % target_lang))\
+          F.col('a.title') == F.col('t.%s_title' % target_lang), 'left_outer')\
     .select([F.col('a.id').alias('wikidata_id'),
              F.col('a.title'),
              F.col('s.count').alias('sitelinks_count'),
-             F.col('t.%s_normalized_rank' % target_lang).alias('output')])
+             F.col('t.%s_normalized_rank' % target_lang).alias('output')])\
+    .na.fill(0)
 common_articles = common_wikidata_ids\
     .alias('c')\
     .join(target_articles.alias('a'),
@@ -146,11 +147,11 @@ predictions = model.transform(prediction_data)
 print('---> Made predictions')
 
 # Save predictions to a file
-source_articles = source_articles\
+source_only_articles = source_only_articles\
     .withColumn("row_number", F.monotonically_increasing_id())
 predictions = predictions\
     .withColumn("row_number", F.monotonically_increasing_id())
-predictions = source_articles\
+predictions = source_only_articles\
     .alias('s')\
     .join(predictions.alias('p'),
           F.col('s.row_number') == F.col('p.row_number'))\
