@@ -31,3 +31,7 @@ Suggest Wikipedia articles for translation: https://arxiv.org/abs/1604.03235
 
    The higher the normalized rank, the more page views an article is
    predicted to receive if created in the target language.
+
+## Misc
+1. Generate language list from dblist:
+   `cat wikipedia.dblist | rev | cut -c 5- | rev > wikipedia.langlist`
