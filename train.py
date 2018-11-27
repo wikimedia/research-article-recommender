@@ -40,6 +40,7 @@ print('---> Started a Spark session')
 wikidata = spark\
     .read\
     .parquet('/user/joal/wmf/data/wmf/mediawiki/wikidata_parquet/20180108')\
+    .where(F.col('type') == 'item')\
     .select('id', F.explode('siteLinks').alias('sl'))\
     .select('id', 'sl.site', 'sl.title')
 print('---> Read Wikidata parquet')
@@ -51,7 +52,6 @@ print('---> Got wikidata sitelinks')
 # Get articles in the main namespace for the language pair.
 articles = wikidata\
     .where((F.col('site') == source_wiki) | (F.col('site') == target_wiki))\
-    .filter(F.col('id').startswith('Q'))\
     .filter(~F.col('title').contains(':'))
 print('---> Got articles titles for the source and target languages')
 

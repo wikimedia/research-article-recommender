@@ -35,3 +35,5 @@ Suggest Wikipedia articles for translation: https://arxiv.org/abs/1604.03235
 ## Misc
 1. Generate language list from dblist:
    `cat wikipedia.dblist | rev | cut -c 5- | rev > wikipedia.langlist`
+2. Outputting similar Wikidata items:
+   `PYSPARK_DRIVER_PYTHON=python2 spark2-submit --master yarn --executor-memory 32G --executor-cores 4 --driver-memory 32G --conf spark.driver.maxResultSize=32G wikidata_similar_items.py`
