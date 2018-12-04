@@ -22,7 +22,7 @@ print('---> Started a Spark session')
 
 wikidata = spark\
     .read\
-    .parquet('/user/joal/wmf/data/wmf/mediawiki/wikidata_parquet/20180108')\
+    .parquet('/user/joal/wmf/data/wmf/mediawiki/wikidata_parquet/20181001')\
     .select('id')\
     .distinct()
 

@@ -39,7 +39,7 @@ print('---> Started a Spark session')
 # Get Wikidata items.
 wikidata = spark\
     .read\
-    .parquet('/user/joal/wmf/data/wmf/mediawiki/wikidata_parquet/20180108')\
+    .parquet('/user/joal/wmf/data/wmf/mediawiki/wikidata_parquet/20181001')\
     .where(F.col('type') == 'item')\
     .select('id', F.explode('siteLinks').alias('sl'))\
     .select('id', 'sl.site', 'sl.title')
