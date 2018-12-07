@@ -1,10 +1,6 @@
 # research-translation-recommendation-models
 scripts used in building models that suggest article recommendations
 
-## Research
-Suggest Wikipedia articles for translation: https://arxiv.org/abs/1604.03235
-
-
 ## How to run
 0. `ssh stat1007`
 1. Clone this repo and `cd` into it.

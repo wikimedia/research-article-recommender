@@ -1,0 +1,49 @@
+* Algorithm
+
+** Research
+   The algorithm is based on the research [[https://arxiv.org/abs/1604.03235]["Growing Wikipedia Across Languages via Recommendation"]]
+
+** Implementation
+*** Wikidata dumps
+    Currently, the Wikidata dumps are being generated manually, and the
+    latest dumps are from 10/01/2018.
+*** Top Wikipedias
+    1. We get the list of top 50 Wikipedias (by article count) from Eric
+       Zachte's StatisticsMonthly.csv (stat1007). We'll use this list in
+       a later step.
+*** Page views
+    1. For a given Wikipedia, we first calculate the number of page
+       views (over the last 180 days ending with a given date) for each
+       article (in the Main namespace) that has a Wikidata ID.
+    2. For each article we also calculate its normalized rank and its
+       log rank. Article's normalized rank is its page view count
+       divided by the total number of articles in Wikipedia for that
+       language. Log rank is the natural logarithm of the page view
+       count.
+    3. We also create a dataframe that contains the page view count,
+       normalized rank, and log rank for the top 50 Wikipedias.
+*** Training
+    1. For a given language pair (source – target), we identify common
+       Wikidata items that are present in both language Wikipedias.
+    2. Each common Wikidata item will have 151 features. In addition to
+       the Wikipedia site link count in Wikidata for the item, this
+       includes each of the top 50 language's page view count,
+       normalized rank, and log rank.
+    3. We use these features to train a random forest regressor. The
+       output is the normalized rank for each item in the target
+       Wikipedia.
+*** Predicting
+    1. We then find Wikipedia articles that are present in the source
+       Wikipedia and absent from the target Wikipedia. For these
+       articles using the 151 features and the trained model, we predict
+       the normalized ranks.
+    2. Predicted normalized ranks are Wikipedia specific. For the data
+       trained using Wikidata dumps of 10/01/2018, page views from
+       06/03/2018 til 11/30/2018, ruwiki as the source, and uzwiki as
+       the target Wikipedia, the lowest predicted normalized rank is
+       0.0000998489601025, while the highest is 0.000100008614142. For
+       the same setup, but with enwiki as the source, and eswiki as the
+       target Wikipedia, the lowest normalized rank is
+       0.0000971364905335, and the highest is 0.000101408648341.
+    3. The higher the normalized rank, the more page views an article is
+       predicted to receive if created in the target language.
