@@ -39,15 +39,15 @@ print('---> Got articles titles for the wiki')
 
 start_date = end_date - timedelta(days=180)
 sql = """
-    SELECT page_title AS %s_title, sum(view_count) as %s_pageviews
+    SELECT page_title AS %s_title, sum(view_count) as %s_pageviews,
+        RANK() OVER (ORDER BY sum(view_count) ASC) as rank
     FROM wmf.pageview_hourly
     WHERE
         ((year = %d AND month < %d) OR (year = %d AND month >= %d))
         AND project="%s.wikipedia"
         AND agent_type="user"
         AND instr(page_title, ':')=0
-    GROUP BY page_title
-    ORDER BY %s_pageviews
+    GROUP BY page_title;
 """
 pageviews = spark.sql(
     sql % (lang, lang, end_date.year, end_date.month, start_date.year,
@@ -55,18 +55,18 @@ pageviews = spark.sql(
 print('---> Queried target pageviews')
 
 target_article_count = pageviews.count()
-# Normalize pageviews
+# Calculate normalized and log ranks
 pageviews = pageviews\
     .withColumn('%s_normalized_rank' % lang,
-                F.col('%s_pageviews' % lang) / target_article_count)\
+                F.col('rank') / target_article_count)\
     .withColumn('%s_log_rank' % lang,
-                F.log(F.col('%s_pageviews' % lang)))
+                F.log(F.col('rank')))
 
 pageviews = pageviews\
     .alias('p')\
     .join(articles.alias('a'), F.col('a.title') == F.col('p.%s_title' % lang))
 
-pageviews = pageviews.drop('title').drop('site')
+pageviews = pageviews.drop('title').drop('site').drop('rank')
 
 pageviews.write.parquet(
     "%s%s-pageviews-%s-%s.parquet" %
