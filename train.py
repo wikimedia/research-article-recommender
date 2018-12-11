@@ -31,7 +31,7 @@ if source_wiki not in wikipedias or target_wiki not in wikipedias:
 
 spark = SparkSession.builder\
     .master('yarn')\
-    .appName('translation-recommendation')\
+    .appName('article-recommender')\
     .enableHiveSupport()\
     .getOrCreate()
 print('---> Started a Spark session')

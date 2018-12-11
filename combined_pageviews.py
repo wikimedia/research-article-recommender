@@ -15,7 +15,7 @@ start_date = end_date - timedelta(days=180)
 
 spark = SparkSession.builder\
     .master('yarn')\
-    .appName('translation-recommendation')\
+    .appName('article-recommender')\
     .enableHiveSupport()\
     .getOrCreate()
 print('---> Started a Spark session')

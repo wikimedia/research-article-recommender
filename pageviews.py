@@ -17,7 +17,7 @@ wiki = '%swiki' % lang
 
 spark = SparkSession.builder\
     .master('yarn')\
-    .appName('translation-recommendation')\
+    .appName('article-recommender')\
     .enableHiveSupport()\
     .getOrCreate()
 print('---> Started a Spark session')
@@ -47,11 +47,11 @@ sql = """
         AND project="%s.wikipedia"
         AND agent_type="user"
         AND instr(page_title, ':')=0
-    GROUP BY page_title;
+    GROUP BY page_title
 """
 pageviews = spark.sql(
     sql % (lang, lang, end_date.year, end_date.month, start_date.year,
-           start_date.month, lang, lang))
+           start_date.month, lang))
 print('---> Queried target pageviews')
 
 target_article_count = pageviews.count()
