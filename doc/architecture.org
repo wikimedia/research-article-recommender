@@ -1,0 +1,85 @@
+* Architecture
+** UML
+   #+BEGIN_SRC plantuml :file article-recommmendation-pipeline-uml.png
+   artifact "Research Paper"
+
+   node stat1007 {
+       artifact StatisticsMonthly.csv
+   }
+
+   database wikishared {
+       artifact cx_translations
+   }
+
+   database "m2-master" {
+       frame views {
+           artifact language
+           artifact article_recommendation
+       }
+       frame tables {
+           folder old {
+               artifact language_20181001
+               artifact article_recommendation_20181001
+           }
+
+           folder current {
+               artifact language_20190401
+               artifact article_recommendation_20190401
+           }
+       }
+
+       [language_20190401] --> [language]
+       [article_recommendation_20190401] --> [article_recommendation]
+   }
+
+   cloud "Analytics Cluster" {
+       database Hive {
+          artifact "wmf.pageview_hourly"
+       }
+       storage "Wikidata Dumps"
+       folder "Article Normalized Scores" {
+           artifact "other tsvs ..."
+           artifact "ko-uz.tsv"
+        }
+       component "Paper Implementation"
+
+
+       Hive --> [Paper Implementation]
+       [Wikidata Dumps] --> [Paper Implementation]
+       [Research Paper] --> [Paper Implementation]
+       [StatisticsMonthly.csv] --> [Paper Implementation]
+       [cx_translations] --> [Paper Implementation]
+       [Paper Implementation] --> [ko-uz.tsv]
+       [Paper Implementation] --> [other tsvs ...]
+       [ko-uz.tsv] --> [article_recommendation_20190401]
+       [ko-uz.tsv] --> [language_20190401]
+   }
+
+   cloud Wikipedia {
+       artifact "MW API 1"
+   }
+
+   cloud Wikidata {
+       artifact "MW API 2"
+   }
+
+   cloud Services {
+       node "other workers ..."
+       node "worker 1"
+
+       [worker 1] --> [article_recommendation]
+       [worker 1] --> [language]
+       [worker 1] --> [MW API 1]
+       [worker 1] --> [MW API 2]
+   }
+
+   folder Users {
+       entity "other users ..."
+       entity "user 1"
+
+       [user 1] ..> [worker 1]
+   }
+   #+END_SRC
+
+   #+RESULTS:
+   [[file:article-recommmendation-pipeline-uml.png]]

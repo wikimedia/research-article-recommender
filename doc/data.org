@@ -1,0 +1,7 @@
+* Data
+** Topsites
+   The current version of topsites is taken from
+   ~stat1007:/home/ezachte/wikistats_data/dumps/csv/csv_wp/StatisticsMonthly.csv~.
+
+   With Erik's retirement, the future of this CSV is unknown. We'll have
+   to find another way of getting topsites.
