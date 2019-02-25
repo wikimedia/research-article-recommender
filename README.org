@@ -19,3 +19,8 @@
    For other documentation see the ~doc~ folder.
 
 [fn:1] https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html
+
+** How to package
+   - From the root directory run:
+     + python3 setup.py sdist bdist_wheel
+   - Generated files will be in ./dist/
