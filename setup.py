@@ -4,7 +4,7 @@ with open("README.org", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="article-recommender-bmansurov",
+    name="article_recommender-bmansurov",
     version="0.0.1",
     author="Bahodir Mansurov",
     author_email="bmansurov@wikimedia.org",
@@ -12,8 +12,8 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/x-org",
     url="https://gerrit.wikimedia.org/r/#/admin/projects/research/article-recommender",
-    packages=['article-recommender'],
-    package_dir={'article-recommender': 'src'},
+    packages=['article_recommender'],
+    package_dir={'article_recommender': 'src'},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GPLv3 License",
