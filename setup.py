@@ -12,7 +12,8 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/x-org",
     url="https://gerrit.wikimedia.org/r/#/admin/projects/research/article-recommender",
-    packages=setuptools.find_packages(),
+    packages=['article-recommender'],
+    package_dir={'article-recommender': 'src'},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: GPLv3 License",
