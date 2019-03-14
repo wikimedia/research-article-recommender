@@ -1,0 +1,30 @@
+* Article-recommender
+  Recommend Wikipedia articles for creation
+
+** Requirements
+   - `pyspark` (is assumed to be available in the cluster)
+** Output
+   The output looks something like this:
+
+   | wikidata_id | normalized_rank |
+   |-------------+-----------------|
+   | Q125576     |        0.930232 |
+   | Q127418     |        0.928457 |
+   | Q125576     |        0.927625 |
+   | Q226697     |        0.919053 |
+   | ...         |                 |
+
+** Documentation
+   Code documentation adheres to the Google Style Python
+   Docstrings[fn:1].
+
+   For other documentation see the ~doc~ folder.
+
+[fn:1] https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_google.html
+
+** How to package and upload to PyPi
+   - From the root directory run:
+     + python3 setup.py sdist bdist_wheel
+   - Generated files will be in ./dist/
+   - Upload to PyPi:
+     + twine upload dist/*

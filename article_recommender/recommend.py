@@ -19,6 +19,7 @@ import argparse
 import csv
 from datetime import datetime, timedelta
 import logging
+import os.path
 
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler
@@ -26,12 +27,14 @@ from pyspark.ml.regression import RandomForestRegressor
 from pyspark.sql import functions as F, SparkSession
 
 
-TOPSITES_FILE = '../data/topsites.tsv'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+TOPSITES_FILE = BASE_DIR + '/data/topsites.tsv'
 """string: Location of the TSV file that contains the top 50 Wikipedias
 by article count.
 """
 
-DBLIST_FILE = '../data/wikipedia.dblist'
+DBLIST_FILE = BASE_DIR + '/data/wikipedia.dblist'
 """string: Location of the TSV file that contains the list of
 Wikipedias.
 """
