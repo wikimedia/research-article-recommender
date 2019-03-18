@@ -377,21 +377,19 @@ def get_predictions_filename(start_date, end_date, source_language,
          source_language, target_language)
 
 
-def train(spark_session, options):
+def train(source_language, target_language, end_date):
     """Train models and create article normalized scores.
 
     Args:
-        spark_session: instance of SparkSession
-        options (object): command line options passed by the user
+        source_language (string)
+        target_language (string)
+        end_date (datetime)
 
     """
-    source_language = options.source_language
-    target_language = options.target_language
-    end_date = options.end_date
-
     source_wiki = '%swiki' % source_language
     target_wiki = '%swiki' % target_language
     start_date = end_date - timedelta(days=TRAIN_RANGE_DAYS)
+    spark_session = get_spark_session()
 
     wikidata = get_wikidata(spark_session)
     sitelinks = wikidata.groupBy('id').count()
@@ -498,7 +496,8 @@ def main():
     """
     options = get_cmd_options()
     if validate_cmd_options(options):
-        train(get_spark_session(), options)
+        train(options.source_language, options.target_language,
+              options.end_date)
 
 
 if __name__ == '__main__':
