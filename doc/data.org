@@ -5,3 +5,11 @@
 
    With Erik's retirement, the future of this CSV is unknown. We'll have
    to find another way of getting topsites.
+** Language pairs
+   We'll use ContentTranslation data to get the top 10 language pairs
+   for training. Copy util/top-language-pairs.sql to stat1007 and
+   execute:
+
+   #+BEGIN_SRC bash
+   cat top-language-pairs.sql | mysql -h x1-analytics-replica.eqiad.wmnet -P 3320 -A > top-language-pairs.txt
+   #+END_SRC
