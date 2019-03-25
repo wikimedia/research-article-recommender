@@ -29,12 +29,12 @@ from pyspark.sql import functions as F, SparkSession
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-TOPSITES_FILE = BASE_DIR + '/data/topsites.tsv'
+TOP_SITES_FILE = BASE_DIR + '/data/topsites.tsv'
 """string: Fallback location of the TSV file that contains the top 50
 Wikipedias by article count.
 """
 
-DBLIST_FILE = BASE_DIR + '/data/wikipedia.dblist'
+DB_LIST_FILE = BASE_DIR + '/data/wikipedia.dblist'
 """string: Fallback location of the TSV file that contains the list of
 Wikipedias.
 """
@@ -156,7 +156,7 @@ class NormalizedScores:
         return pageviews
 
     def get_top_languages(self):
-        """Return to 50 wikipedia languages by article count.
+        """Return top Wikipedia languages by article count.
         Returns:
             list<string>: e.g. ['en', 'de', 'sv', ...]
         """
@@ -165,9 +165,10 @@ class NormalizedScores:
             next(tsv_reader)
             languages = [x[0] for x in tsv_reader]
             ll = len(languages)
-            if ll != 50:
+            if ll != self.TOP_LANGUAGES_COUNT:
                 logging.warning('We got %d top languages, and not %d.'
                                 % (ll, self.TOP_LANGUAGES_COUNT))
+            return languages
 
     def calculate_combined_pageviews_and_save(self, wikidata, filename):
         """Calculate combined pageviews and save for later use in HDFS.
@@ -176,7 +177,7 @@ class NormalizedScores:
             filename (string): Where to save data
         Returns:
             dataframe: Combined pageviews with normalized and log ranks for
-                top 50 Wikipedias
+                top Wikipedias
         """
         top_languages = self.get_top_languages()
         wikidata_ids = wikidata.select('id').distinct()
@@ -204,14 +205,15 @@ class NormalizedScores:
         return pageviews
 
     def get_combined_pageviews(self, wikidata):
-        """Return combined pageviews for the top 50 Wikipedias.
-        If the parquet file exists, return it, otherwise generate the file,
-        save and return it.
+        """Return combined pageviews for the top Wikipedias. If the parquet file
+        exists, return it, otherwise generate the file, save and return
+        it.
         Args:
             wikidata (dataframe)
         Returns:
             dataframe: Combined pageviews with normalized and log ranks for
-                top 50 Wikipedias
+                top self.TOP_LANUAGES_COUNT Wikipedias
+
         """
         filename = '%s/combined-pageviews-%s-%s' %\
             (self.output_dir, self.start_date, self.end_date)
@@ -352,10 +354,10 @@ def get_cmd_options():
                         help='Target language code, e.g. en or uz.')
     parser.add_argument('--topsites_file',
                         help='Location of top Wikipedias by edit count.',
-                        default=TOPSITES_FILE)
+                        default=TOP_SITES_FILE)
     parser.add_argument('--dblist-file',
                         help='Location of list of Wikipedias.',
-                        default=DBLIST_FILE)
+                        default=DB_LIST_FILE)
     parser.add_argument('--wikidata_dir',
                         help='Location of Wikidata dumps in HDFS.',
                         default=WIKIDATA_DIR)
