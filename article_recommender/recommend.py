@@ -43,6 +43,9 @@ WIKIDATA_DIR = '/user/joal/wmf/data/wmf/mediawiki/wikidata_parquet/20181001'
 """string: Fallback location of Wikidata dumps in parquet format.
 """
 
+TMP_DIR = '/tmp'
+"""string: Fallback location for storing temporary files"""
+
 OUTPUT_DIR = '/user/bmansurov/article-recommender'
 """string: Fallback location of the directory in HDFS for storing
 intermediate and final output.
@@ -65,7 +68,8 @@ class NormalizedScores:
     """
 
     def __init__(self, spark, source_language, target_language,
-                 end_date, wikidata_dir, topsites_file, output_dir):
+                 end_date, wikidata_dir, topsites_file, output_dir,
+                 tmp_dir):
         self.spark = spark
         self.source_language = source_language
         self.target_language = target_language
@@ -73,6 +77,7 @@ class NormalizedScores:
         self.wikidata_dir = wikidata_dir
         self.topsites_file = topsites_file
         self.output_dir = output_dir
+        self.tmp_dir = tmp_dir
 
         self.source_wiki = '%swiki' % source_language
         self.target_wiki = '%swiki' % target_language
@@ -143,8 +148,8 @@ class NormalizedScores:
         Returns:
             dataframe: Pageviews with normalized and log ranks
         """
-        filename = '%s/pageviews-%s-%s-%s' %\
-            (self.output_dir, self.start_date, self.end_date, language)
+        filename = '%s/article-recommender-pageviews-%s-%s-%s' %\
+            (self.tmp_dir, self.start_date, self.end_date, language)
         try:
             pageviews = self.spark.read.parquet(filename)
             logging.debug('Returning existing pageviews from %s.' % filename)
@@ -215,8 +220,8 @@ class NormalizedScores:
                 top self.TOP_LANUAGES_COUNT Wikipedias
 
         """
-        filename = '%s/combined-pageviews-%s-%s' %\
-            (self.output_dir, self.start_date, self.end_date)
+        filename = '%s/article-recommender-combined-pageviews-%s-%s' %\
+            (self.tmp_dir, self.start_date, self.end_date)
         try:
             pageviews = self.spark.read.parquet(filename)
             logging.debug('Returning existing combined pageviews from %s.'
@@ -326,7 +331,7 @@ class NormalizedScores:
                   F.col('s.row_number') == F.col('p.row_number'))\
             .select([F.col('s.wikidata_id'),
                      F.col('p.prediction').alias('normalized_rank')])
-        filename = '%s/predictions-%s-%s-%s-%s.tsv' %\
+        filename = '%s/article-recommender-normalized-scores-%s-%s-%s-%s.tsv' %\
             (self.output_dir, self.start_date, self.end_date,
              self.source_language, self.target_language)
         predictions\
@@ -364,6 +369,9 @@ def get_cmd_options():
     parser.add_argument('--output_dir',
                         help='Output location in HDFS.',
                         default=OUTPUT_DIR)
+    parser.add_argument('--tmp_dir',
+                        help='Location for saving temporary files in HDFS.',
+                        default=TMP_DIR)
     return parser.parse_args()
 
 
