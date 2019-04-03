@@ -431,7 +431,8 @@ def main():
             options.end_date,
             options.wikidata_dir,
             options.topsites_file,
-            options.output_dir
+            options.output_dir,
+            options.tmp_dir
         )
         normalized_scores.train()
 
