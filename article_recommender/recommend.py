@@ -6,8 +6,7 @@
 This script allows generating article normalized scores that can be used
 for sorting missing articles.
 
-Example:
-$ python recommend.py 2019/01/01 en uz
+$ python recommend.py en uz 20190131
 
 Todo:
     * break up the big functions into multiple small functions.
@@ -34,7 +33,7 @@ TOP_SITES_FILE = BASE_DIR + '/data/topsites.tsv'
 Wikipedias by article count.
 """
 
-DB_LIST_FILE = BASE_DIR + '/data/wikipedia.dblist'
+DBLIST_FILE = BASE_DIR + '/data/wikipedia.dblist'
 """string: Fallback location of the TSV file that contains the list of
 Wikipedias.
 """
@@ -165,15 +164,13 @@ class NormalizedScores:
         Returns:
             list<string>: e.g. ['en', 'de', 'sv', ...]
         """
-        with open(self.topsites_file, 'r') as inf:
-            tsv_reader = csv.reader(inf, delimiter='\t')
-            next(tsv_reader)
-            languages = [x[0] for x in tsv_reader]
-            ll = len(languages)
-            if ll != self.TOP_LANGUAGES_COUNT:
-                logging.warning('We got %d top languages, and not %d.'
-                                % (ll, self.TOP_LANGUAGES_COUNT))
-            return languages
+        topsites = csv_to_list(self.spark, self.topsites_file)
+        languages = [x[0] for x in topsites]
+        ll = len(languages)
+        if ll != self.TOP_LANGUAGES_COUNT:
+            logging.warning('We got %d top languages, and not %d.'
+                            % (ll, self.TOP_LANGUAGES_COUNT))
+        return languages
 
     def calculate_combined_pageviews_and_save(self, wikidata, filename):
         """Calculate combined pageviews and save for later use in HDFS.
@@ -339,7 +336,7 @@ class NormalizedScores:
             .write\
             .csv(filename, mode='overwrite', sep='\t', header=True,
                  compression='bzip2')
-        logging.debug('Saved predictions file as %.' % filename)
+        logging.debug('Saved predictions file as %s.' % filename)
         logging.debug('Finished training.')
 
 
@@ -350,19 +347,22 @@ def get_cmd_options():
     """
     parser = argparse.ArgumentParser(
         description='Generates article normalized scores.')
-    parser.add_argument('end_date',
-                        help='End date in the yyyymmdd format.',
-                        type=lambda x: datetime.strptime(x, "%Y%m%d").date())
     parser.add_argument('source_language',
                         help='Source language code, e.g. en or uz.')
     parser.add_argument('target_language',
                         help='Target language code, e.g. en or uz.')
+    parser.add_argument('end_date',
+                        help='End date in the yyyymmdd format.',
+                        type=lambda x: datetime.strptime(x, "%Y%m%d").date())
+    parser.add_argument('--spark_app_name',
+                        help='Name of the Spark application.',
+                        default='article-recommender')
     parser.add_argument('--topsites_file',
-                        help='Location of top Wikipedias by edit count.',
+                        help='Location of list of top Wikipedias by edit count.',
                         default=TOP_SITES_FILE)
-    parser.add_argument('--dblist-file',
+    parser.add_argument('--dblist_file',
                         help='Location of list of Wikipedias.',
-                        default=DB_LIST_FILE)
+                        default=DBLIST_FILE)
     parser.add_argument('--wikidata_dir',
                         help='Location of Wikidata dumps in HDFS.',
                         default=WIKIDATA_DIR)
@@ -375,26 +375,45 @@ def get_cmd_options():
     return parser.parse_args()
 
 
-def get_wikipedia_dblist(dblist_file):
+def csv_to_list(spark, filename, separator='\t', headerp=True):
+    if filename.startswith('hdfs://'):
+        data = spark.read.load(
+            filename,
+            format='csv',
+            sep=separator,
+            inferSchema='true',
+            header='true' if headerp else 'false').collect()
+    else:
+        with open(filename, 'r') as inf:
+            tsv_reader = csv.reader(inf, delimiter=separator)
+            if headerp:
+                next(tsv_reader)
+            data = list(tsv_reader)
+    return data
+
+
+def get_wikipedia_dblist(spark, dblist_file):
     """Return a set of Wikipedias from a file.
     Args:
+        spark (SparkSession)
         dblist_file (string): Name of the file that contains the list of
           Wikipedias
     Returns:
         set: Wikipedias, e.g. {'enwiki', 'uzwiki', ... }
     """
-    with open(dblist_file, 'r') as inf:
-        return set([x.strip() for x in inf.readlines()])
+    dblist = csv_to_list(spark, dblist_file, headerp=False)
+    return set([x[0].strip() for x in dblist])
 
 
-def validate_cmd_options(options):
+def validate_cmd_options(spark, options):
     """Validate command line options passed by the user.
     Args:
+        spark (SparkSession)
         options (object)
     Returns:
         bool: In case of error, False is returned. Otherwise, True.
     """
-    wikipedias = get_wikipedia_dblist(options.dblist)
+    wikipedias = get_wikipedia_dblist(spark, options.dblist_file)
     if '%swiki' % options.source_language not in wikipedias:
         logging.error('Unrecognized source language: %s' %
                       options.source_language)
@@ -418,12 +437,13 @@ def main():
     Parses command line options, trains models, and makes predictions.
     """
     options = get_cmd_options()
-    if validate_cmd_options(options):
-        spark = SparkSession\
-            .builder\
-            .appName('article-recommender')\
-            .enableHiveSupport()\
-            .getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName(options.spark_app_name)\
+        .enableHiveSupport()\
+        .getOrCreate()
+    if validate_cmd_options(spark, options):
+        print(options)
         normalized_scores = NormalizedScores(
             spark,
             options.source_language,
