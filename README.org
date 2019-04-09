@@ -28,3 +28,18 @@
    - Generated files will be in ./dist/
    - Upload to PyPi:
      + twine upload dist/*
+** How to test changes
+   - Make changes, commit, upload to Gerrit.
+   - Clone your patch to stat1007.
+   - cd article-recommender
+   - Optional: edit article_recommender/recommend.py and set
+     TRAIN_RANGE_DAYS to 10, and TOP_LANGUAGES_COUNT to 1 for faster
+     train times.
+   - Generate recommendations, e.g.:
+     #+BEGIN_SRC bash
+     spark2-submit --master yarn --deploy-mode client\
+     article_recommender/recommend.py kk uz 20190401
+     #+END_SRC
+   - In case of an error find the application ID in the logs and search
+     for the cause of the error, e.g.:
+     yarn logs -applicationId application_1553764233554_53161

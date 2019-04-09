@@ -9,8 +9,6 @@ for sorting missing articles.
 $ python recommend.py en uz 20190131
 
 Todo:
-    * break up the big functions into multiple small functions.
-    * add debug statements
     * add unit tests
 """
 
@@ -28,7 +26,7 @@ from pyspark.sql import functions as F, SparkSession
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-TOP_SITES_FILE = BASE_DIR + '/data/topsites.tsv'
+TOPSITES_FILE = BASE_DIR + '/data/topsites.tsv'
 """string: Fallback location of the TSV file that contains the top 50
 Wikipedias by article count.
 """
@@ -233,25 +231,9 @@ class NormalizedScores:
             )
         return pageviews
 
-    def train(self):
-        """Train models and create article normalized scores."""
-        logging.debug('Starting to train.')
-        wikidata = self.get_wikidata()
-        sitelinks = wikidata.groupBy('id').count()
-        articles = wikidata\
-            .where((F.col('site') == self.source_wiki) |
-                   (F.col('site') == self.target_wiki))\
-            .filter(~F.col('title').contains(':'))
-        source_wikidata_ids = articles\
-            .filter(articles.site == self.source_wiki)\
-            .select('id')
-        target_wikidata_ids = articles\
-            .filter(articles.site == self.target_wiki)\
-            .select('id')
-        common_wikidata_ids = source_wikidata_ids.intersect(
-            target_wikidata_ids)
+    def get_target_articles(self, articles, sitelinks):
         target_pageviews = self.get_pageviews(self.target_language, articles)
-        target_articles = articles\
+        return articles\
             .alias('a')\
             .where(F.col('a.site') == self.target_wiki)\
             .join(sitelinks.alias('s'), F.col('a.id') == F.col('s.id'))\
@@ -265,11 +247,65 @@ class NormalizedScores:
                      F.col('t.%s_normalized_rank' %
                            self.target_language).alias('output')])\
             .na.fill(0)
-        common_articles = common_wikidata_ids\
+
+    def get_common_articles(self, common_wikidata_ids, target_articles):
+        return common_wikidata_ids\
             .alias('c')\
             .join(target_articles.alias('a'),
                   F.col('c.id') == F.col('a.wikidata_id'))\
             .select('a.*')
+
+    def get_source_articles(self, articles, sitelinks):
+        return articles\
+            .alias('a')\
+            .where(F.col('a.site') == self.source_wiki)\
+            .join(sitelinks.alias('s'), F.col('a.id') == F.col('s.id'))\
+            .select([F.col('a.id').alias('wikidata_id'),
+                     F.col('a.title'),
+                     F.col('s.count').alias('sitelinks_count')])
+
+    def get_source_only_articles(
+            self, source_wikidata_ids, common_wikidata_ids, source_articles):
+        source_only_wikidata_ids = source_wikidata_ids.subtract(
+            common_wikidata_ids)
+        return source_only_wikidata_ids\
+            .alias('c')\
+            .join(source_articles.alias('s'),
+                  F.col('c.id') == F.col('s.wikidata_id'))\
+            .select('s.*')
+
+    def get_sitelinks(self, wikidata):
+        return wikidata.groupBy('id').count()
+
+    def get_articles(self, wikidata):
+        return wikidata\
+            .where((F.col('site') == self.source_wiki) |
+                   (F.col('site') == self.target_wiki))\
+            .filter(~F.col('title').contains(':'))
+
+    def get_source_wikidata_ids(self, articles):
+        return articles\
+            .filter(articles.site == self.source_wiki)\
+            .select('id')
+
+    def get_target_wikidata_ids(self, articles):
+        return articles\
+            .filter(articles.site == self.target_wiki)\
+            .select('id')
+
+    def train(self):
+        """Train models and create article normalized scores."""
+        logging.debug('Starting to train.')
+        wikidata = self.get_wikidata()
+        sitelinks = self.get_sitelinks(wikidata)
+        articles = self.get_articles(wikidata)
+        source_wikidata_ids = self.get_source_wikidata_ids(articles)
+        target_wikidata_ids = self.get_target_wikidata_ids(articles)
+        common_wikidata_ids = source_wikidata_ids.intersect(
+            target_wikidata_ids)
+        target_articles = self.get_target_articles(articles, sitelinks)
+        common_articles = self.get_common_articles(
+            common_wikidata_ids, target_articles)
         logging.debug('Got common articles.')
         combined_pageviews = self.get_combined_pageviews(wikidata)
         input_df = common_articles\
@@ -279,8 +315,8 @@ class NormalizedScores:
         input_cols = [x for x in combined_pageviews.columns
                       if x.endswith('_pageviews') or x.endswith('_rank')]
         input_cols.append('sitelinks_count')
-        vector_assembler = VectorAssembler(inputCols=input_cols,
-                                           outputCol='features')
+        vector_assembler = VectorAssembler(
+            inputCols=input_cols, outputCol='features')
         logging.debug('Starting to train a model.')
         train_data = vector_assembler\
             .transform(input_df)\
@@ -291,20 +327,9 @@ class NormalizedScores:
         model = pipeline.fit(train_data)
         logging.debug('Finished training the model.')
 
-        source_only_wikidata_ids = source_wikidata_ids.subtract(
-            common_wikidata_ids)
-        source_articles = articles\
-            .alias('a')\
-            .where(F.col('a.site') == self.source_wiki)\
-            .join(sitelinks.alias('s'), F.col('a.id') == F.col('s.id'))\
-            .select([F.col('a.id').alias('wikidata_id'),
-                     F.col('a.title'),
-                     F.col('s.count').alias('sitelinks_count')])
-        source_only_articles = source_only_wikidata_ids\
-            .alias('c')\
-            .join(source_articles.alias('s'),
-                  F.col('c.id') == F.col('s.wikidata_id'))\
-            .select('s.*')
+        source_articles = self.get_source_articles(articles, sitelinks)
+        source_only_articles = self.get_source_only_articles(
+            source_wikidata_ids, common_wikidata_ids, source_articles)
         output_df = source_only_articles\
             .alias('s')\
             .join(combined_pageviews.alias('c'),
@@ -328,7 +353,7 @@ class NormalizedScores:
                   F.col('s.row_number') == F.col('p.row_number'))\
             .select([F.col('s.wikidata_id'),
                      F.col('p.prediction').alias('normalized_rank')])
-        filename = '%s/article-recommender-normalized-scores-%s-%s-%s-%s.tsv' %\
+        filename = '%s/normalized-scores-%s-%s-%s-%s.tsv' %\
             (self.output_dir, self.start_date, self.end_date,
              self.source_language, self.target_language)
         predictions\
@@ -358,8 +383,8 @@ def get_cmd_options():
                         help='Name of the Spark application.',
                         default='article-recommender')
     parser.add_argument('--topsites_file',
-                        help='Location of list of top Wikipedias by edit count.',
-                        default=TOP_SITES_FILE)
+                        help='List of top Wikipedias by edit count.',
+                        default=TOPSITES_FILE)
     parser.add_argument('--dblist_file',
                         help='Location of list of Wikipedias.',
                         default=DBLIST_FILE)
