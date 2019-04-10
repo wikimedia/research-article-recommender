@@ -15,7 +15,6 @@ Todo:
 import argparse
 import csv
 from datetime import datetime, timedelta
-import logging
 import os.path
 
 from pyspark.ml import Pipeline
@@ -40,13 +39,24 @@ WIKIDATA_DIR = '/user/joal/wmf/data/wmf/mediawiki/wikidata_parquet/20181001'
 """string: Fallback location of Wikidata dumps in parquet format.
 """
 
-TMP_DIR = '/tmp'
+TMP_DIR = '/tmp/article-recommender'
 """string: Fallback location for storing temporary files"""
 
 OUTPUT_DIR = '/user/bmansurov/article-recommender'
 """string: Fallback location of the directory in HDFS for storing
 intermediate and final output.
 """
+
+
+def log(message, type='info'):
+    """Poor man's logger. Works great with YARN though.
+    Args:
+      message (string)
+      type (string)
+    """
+    print('-' * 72)
+    print('%s: %s' % (type.upper(), message))
+    print('-' * 72)
 
 
 class NormalizedScores:
@@ -132,7 +142,7 @@ class NormalizedScores:
         pageviews = pageviews.withColumnRenamed('id', '%s_id' % language)
         pageviews = pageviews.drop('title').drop('site').drop('rank')
         pageviews.write.parquet(filename)
-        logging.debug('Calculated pageviews and saved as %s.' % filename)
+        log('Calculated pageviews and saved as %s.' % filename, 'debug')
         return pageviews
 
     def get_pageviews(self, language, articles):
@@ -149,10 +159,10 @@ class NormalizedScores:
             (self.tmp_dir, self.start_date, self.end_date, language)
         try:
             pageviews = self.spark.read.parquet(filename)
-            logging.debug('Returning existing pageviews from %s.' % filename)
+            log('Returning existing pageviews from %s.' % filename, 'debug')
         except Exception:
-            logging.debug('Starting to calculate pageviews and save as %s.'
-                          % filename)
+            log('Starting to calculate pageviews and save as %s.'
+                % filename, 'debug')
             pageviews = self.calculate_pageviews_and_save(
                 language, articles, filename)
         return pageviews
@@ -166,8 +176,8 @@ class NormalizedScores:
         languages = [x[0] for x in topsites]
         ll = len(languages)
         if ll != self.TOP_LANGUAGES_COUNT:
-            logging.warning('We got %d top languages, and not %d.'
-                            % (ll, self.TOP_LANGUAGES_COUNT))
+            log('We got %d top languages, and not %d.'
+                % (ll, self.TOP_LANGUAGES_COUNT), 'warning')
         return languages
 
     def calculate_combined_pageviews_and_save(self, wikidata, filename):
@@ -200,8 +210,8 @@ class NormalizedScores:
                 .drop('%s_id' % language)\
                 .drop('%s_title' % language)
         pageviews.write.parquet(filename)
-        logging.debug('Calculated combined pageviews and saved as %s.'
-                      % filename)
+        log('Calculated combined pageviews and saved as %s.'
+            % filename, 'debug')
         return pageviews
 
     def get_combined_pageviews(self, wikidata):
@@ -219,13 +229,11 @@ class NormalizedScores:
             (self.tmp_dir, self.start_date, self.end_date)
         try:
             pageviews = self.spark.read.parquet(filename)
-            logging.debug('Returning existing combined pageviews from %s.'
-                          % filename)
+            log('Returning existing combined pageviews from %s.'
+                % filename, 'debug')
         except Exception:
-            logging.debug(
-                'Starting to calculate combined pageviews and save as %s.'
-                % filename
-            )
+            log('Starting to calculate combined pageviews and save as %s.'
+                % filename, 'debug')
             pageviews = self.calculate_combined_pageviews_and_save(
                 wikidata, filename
             )
@@ -295,7 +303,7 @@ class NormalizedScores:
 
     def train(self):
         """Train models and create article normalized scores."""
-        logging.debug('Starting to train.')
+        log('Starting to train.', 'debug')
         wikidata = self.get_wikidata()
         sitelinks = self.get_sitelinks(wikidata)
         articles = self.get_articles(wikidata)
@@ -306,7 +314,7 @@ class NormalizedScores:
         target_articles = self.get_target_articles(articles, sitelinks)
         common_articles = self.get_common_articles(
             common_wikidata_ids, target_articles)
-        logging.debug('Got common articles.')
+        log('Got common articles.', 'debug')
         combined_pageviews = self.get_combined_pageviews(wikidata)
         input_df = common_articles\
             .alias('c')\
@@ -317,7 +325,7 @@ class NormalizedScores:
         input_cols.append('sitelinks_count')
         vector_assembler = VectorAssembler(
             inputCols=input_cols, outputCol='features')
-        logging.debug('Starting to train a model.')
+        log('Starting to train a model.', 'debug')
         train_data = vector_assembler\
             .transform(input_df)\
             .select(['features', 'output'])
@@ -325,7 +333,7 @@ class NormalizedScores:
             featuresCol="features", labelCol="output")
         pipeline = Pipeline(stages=[rf])
         model = pipeline.fit(train_data)
-        logging.debug('Finished training the model.')
+        log('Finished training the model.', 'debug')
 
         source_articles = self.get_source_articles(articles, sitelinks)
         source_only_articles = self.get_source_only_articles(
@@ -334,14 +342,14 @@ class NormalizedScores:
             .alias('s')\
             .join(combined_pageviews.alias('c'),
                   F.col('s.wikidata_id') == F.col('c.id'))
-        logging.debug('Starting to fit the model.')
+        log('Starting to fit the model.', 'debug')
         vector_assembler = VectorAssembler(
             inputCols=input_cols, outputCol='features')
         prediction_data = vector_assembler\
             .transform(output_df)\
             .select(['features'])
         predictions = model.transform(prediction_data)
-        logging.debug('Finished fitting the model.')
+        log('Finished fitting the model.', 'debug')
 
         source_only_articles = source_only_articles\
             .withColumn("row_number", F.monotonically_increasing_id())
@@ -361,8 +369,8 @@ class NormalizedScores:
             .write\
             .csv(filename, mode='overwrite', sep='\t', header=True,
                  compression='bzip2')
-        logging.debug('Saved predictions file as %s.' % filename)
-        logging.debug('Finished training.')
+        log('Saved predictions file as %s.' % filename, 'debug')
+        log('Finished training.', 'debug')
 
 
 def get_cmd_options():
@@ -440,19 +448,19 @@ def validate_cmd_options(spark, options):
     """
     wikipedias = get_wikipedia_dblist(spark, options.dblist_file)
     if '%swiki' % options.source_language not in wikipedias:
-        logging.error('Unrecognized source language: %s' %
-                      options.source_language)
+        log('Unrecognized source language: %s' %
+            options.source_language, 'error')
         return False
     if '%swiki' % options.target_language not in wikipedias:
-        logging.error('Unrecognized target language: %s' %
-                      options.target_language)
+        log('Unrecognized target language: %s' %
+            options.target_language, 'error')
         return False
     if options.source_language == options.target_language:
-        logging.error('Source and target languages cannot be the same.')
+        log('Source and target languages cannot be the same.', 'error')
         return False
     if options.end_date > datetime.today().date():
-        logging.error('End date cannot be later than today: %s.' %
-                      options.end_date)
+        log('End date cannot be later than today: %s.' %
+            options.end_date, 'error')
         return False
     return True
 
