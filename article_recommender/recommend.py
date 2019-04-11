@@ -16,6 +16,8 @@ import argparse
 import csv
 from datetime import datetime, timedelta
 import os.path
+import pprint
+import time
 
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler
@@ -46,6 +48,33 @@ OUTPUT_DIR = '/user/bmansurov/article-recommender'
 """string: Fallback location of the directory in HDFS for storing
 intermediate and final output.
 """
+
+TIME_LOG = []
+"""(str, str, str, str)[]: Combined log of logged times spent when
+running various functions:
+(method name, time spent in seconds, args, kwargs)"""
+
+
+def timeit(method):
+    """Decorator for measuring running time of functions/methods."""
+    def timed(*args, **kwargs):
+        start = time.time()
+        result = method(*args, **kwargs)
+        end = time.time()
+        diff = '%2.2f s' % (end - start)
+        args_str = str(args)
+        kwargs_str = str(args)
+
+        TIME_LOG.append((method.__name__, diff, args_str, kwargs_str))
+
+        print('*' * 72)
+        print('TIME LOG for %r: %s' % (method.__name__, diff))
+        print('Args: %s' % args_str)
+        print('Keyword args: %s' % kwargs_str)
+        print('*' * 72)
+
+        return result
+    return timed
 
 
 def log(message, type='info'):
@@ -90,6 +119,7 @@ class NormalizedScores:
         self.target_wiki = '%swiki' % target_language
         self.start_date = end_date - timedelta(days=self.TRAIN_RANGE_DAYS)
 
+    @timeit
     def get_wikidata(self):
         """Return Wikidata dataframe from parquet.
         Returns:
@@ -102,6 +132,7 @@ class NormalizedScores:
             .select('id', F.explode('siteLinks').alias('sl'))\
             .select('id', 'sl.site', 'sl.title')
 
+    @timeit
     def calculate_pageviews_and_save(self, language, articles, filename):
         """Get pageviews from Hive and save calculated data in parquet.
         Calculated includes normalized and log ranks.
@@ -145,6 +176,7 @@ class NormalizedScores:
         log('Calculated pageviews and saved as %s.' % filename, 'debug')
         return pageviews
 
+    @timeit
     def get_pageviews(self, language, articles):
         """Return pageviews with normalized ranks from file if exits, otherwise
         from Hive and save to file for later use.
@@ -167,6 +199,7 @@ class NormalizedScores:
                 language, articles, filename)
         return pageviews
 
+    @timeit
     def get_top_languages(self):
         """Return top Wikipedia languages by article count.
         Returns:
@@ -180,6 +213,7 @@ class NormalizedScores:
                 % (ll, self.TOP_LANGUAGES_COUNT), 'warning')
         return languages
 
+    @timeit
     def calculate_combined_pageviews_and_save(self, wikidata, filename):
         """Calculate combined pageviews and save for later use in HDFS.
         Args:
@@ -214,6 +248,7 @@ class NormalizedScores:
             % filename, 'debug')
         return pageviews
 
+    @timeit
     def get_combined_pageviews(self, wikidata):
         """Return combined pageviews for the top Wikipedias. If the parquet file
         exists, return it, otherwise generate the file, save and return
@@ -239,6 +274,7 @@ class NormalizedScores:
             )
         return pageviews
 
+    @timeit
     def get_target_articles(self, articles, sitelinks):
         target_pageviews = self.get_pageviews(self.target_language, articles)
         return articles\
@@ -256,6 +292,7 @@ class NormalizedScores:
                            self.target_language).alias('output')])\
             .na.fill(0)
 
+    @timeit
     def get_common_articles(self, common_wikidata_ids, target_articles):
         return common_wikidata_ids\
             .alias('c')\
@@ -263,6 +300,7 @@ class NormalizedScores:
                   F.col('c.id') == F.col('a.wikidata_id'))\
             .select('a.*')
 
+    @timeit
     def get_source_articles(self, articles, sitelinks):
         return articles\
             .alias('a')\
@@ -272,6 +310,7 @@ class NormalizedScores:
                      F.col('a.title'),
                      F.col('s.count').alias('sitelinks_count')])
 
+    @timeit
     def get_source_only_articles(
             self, source_wikidata_ids, common_wikidata_ids, source_articles):
         source_only_wikidata_ids = source_wikidata_ids.subtract(
@@ -282,75 +321,74 @@ class NormalizedScores:
                   F.col('c.id') == F.col('s.wikidata_id'))\
             .select('s.*')
 
+    @timeit
     def get_sitelinks(self, wikidata):
         return wikidata.groupBy('id').count()
 
+    @timeit
     def get_articles(self, wikidata):
         return wikidata\
             .where((F.col('site') == self.source_wiki) |
                    (F.col('site') == self.target_wiki))\
             .filter(~F.col('title').contains(':'))
 
+    @timeit
     def get_source_wikidata_ids(self, articles):
         return articles\
             .filter(articles.site == self.source_wiki)\
             .select('id')
 
+    @timeit
     def get_target_wikidata_ids(self, articles):
         return articles\
             .filter(articles.site == self.target_wiki)\
             .select('id')
 
-    def train(self):
-        """Train models and create article normalized scores."""
-        log('Starting to train.', 'debug')
-        wikidata = self.get_wikidata()
-        sitelinks = self.get_sitelinks(wikidata)
-        articles = self.get_articles(wikidata)
-        source_wikidata_ids = self.get_source_wikidata_ids(articles)
-        target_wikidata_ids = self.get_target_wikidata_ids(articles)
-        common_wikidata_ids = source_wikidata_ids.intersect(
-            target_wikidata_ids)
-        target_articles = self.get_target_articles(articles, sitelinks)
-        common_articles = self.get_common_articles(
-            common_wikidata_ids, target_articles)
-        log('Got common articles.', 'debug')
-        combined_pageviews = self.get_combined_pageviews(wikidata)
+    @timeit
+    def get_common_wikidata_ids(self, source_wikidata_ids, target_wikidata_ids):
+        return source_wikidata_ids.intersect(target_wikidata_ids)
+
+    @timeit
+    def get_input_cols(self, combined_pageviews):
+        input_cols = [x for x in combined_pageviews.columns
+                      if x.endswith('_pageviews') or x.endswith('_rank')]
+        input_cols.append('sitelinks_count')
+        return input_cols
+
+    @timeit
+    def get_model(self, common_articles, combined_pageviews):
         input_df = common_articles\
             .alias('c')\
             .join(combined_pageviews.alias('cp'),
                   F.col('c.wikidata_id') == F.col('cp.id'))
-        input_cols = [x for x in combined_pageviews.columns
-                      if x.endswith('_pageviews') or x.endswith('_rank')]
-        input_cols.append('sitelinks_count')
+        input_cols = self.get_input_cols(combined_pageviews)
         vector_assembler = VectorAssembler(
             inputCols=input_cols, outputCol='features')
-        log('Starting to train a model.', 'debug')
         train_data = vector_assembler\
             .transform(input_df)\
             .select(['features', 'output'])
         rf = RandomForestRegressor(
             featuresCol="features", labelCol="output")
         pipeline = Pipeline(stages=[rf])
-        model = pipeline.fit(train_data)
-        log('Finished training the model.', 'debug')
+        return pipeline.fit(train_data)
 
-        source_articles = self.get_source_articles(articles, sitelinks)
-        source_only_articles = self.get_source_only_articles(
-            source_wikidata_ids, common_wikidata_ids, source_articles)
+    @timeit
+    def predict_normalized_scores(
+            self, source_only_articles, combined_pageviews, model):
         output_df = source_only_articles\
             .alias('s')\
             .join(combined_pageviews.alias('c'),
                   F.col('s.wikidata_id') == F.col('c.id'))
-        log('Starting to fit the model.', 'debug')
+        input_cols = self.get_input_cols(combined_pageviews)
         vector_assembler = VectorAssembler(
             inputCols=input_cols, outputCol='features')
         prediction_data = vector_assembler\
             .transform(output_df)\
             .select(['features'])
-        predictions = model.transform(prediction_data)
-        log('Finished fitting the model.', 'debug')
+        return model.transform(prediction_data)
 
+    @timeit
+    def save_predictions(self, source_only_articles, predictions):
         source_only_articles = source_only_articles\
             .withColumn("row_number", F.monotonically_increasing_id())
         predictions = predictions\
@@ -369,10 +407,32 @@ class NormalizedScores:
             .write\
             .csv(filename, mode='overwrite', sep='\t', header=True,
                  compression='bzip2')
-        log('Saved predictions file as %s.' % filename, 'debug')
-        log('Finished training.', 'debug')
+
+    @timeit
+    def train(self):
+        """Train models and create article normalized scores."""
+        wikidata = self.get_wikidata()
+        sitelinks = self.get_sitelinks(wikidata)
+        articles = self.get_articles(wikidata)
+        source_wikidata_ids = self.get_source_wikidata_ids(articles)
+        target_wikidata_ids = self.get_target_wikidata_ids(articles)
+        common_wikidata_ids = self.get_common_wikidata_ids(
+            source_wikidata_ids, target_wikidata_ids)
+        target_articles = self.get_target_articles(articles, sitelinks)
+        common_articles = self.get_common_articles(
+            common_wikidata_ids, target_articles)
+        combined_pageviews = self.get_combined_pageviews(wikidata)
+        source_articles = self.get_source_articles(articles, sitelinks)
+        source_only_articles = self.get_source_only_articles(
+            source_wikidata_ids, common_wikidata_ids, source_articles)
+
+        model = self.get_model(common_articles, combined_pageviews)
+        predictions = self.predict_normalized_scores(
+            source_only_articles, combined_pageviews, model)
+        self.save_predictions(source_only_articles, predictions)
 
 
+@timeit
 def get_cmd_options():
     """Return command line options passed to the script.
     Returns:
@@ -408,7 +468,20 @@ def get_cmd_options():
     return parser.parse_args()
 
 
+@timeit
 def csv_to_list(spark, filename, separator='\t', headerp=True):
+    """Read CSV and return list.
+
+    Can handle local files and files saved in HDFS. In order to read
+    local files run yarn in client mode.
+
+    Args:
+        filename (string)
+        separator (string)
+        headerp (boolean)
+    Returns:
+        list
+    """
     if filename.startswith('hdfs://'):
         data = spark.read.load(
             filename,
@@ -425,6 +498,7 @@ def csv_to_list(spark, filename, separator='\t', headerp=True):
     return data
 
 
+@timeit
 def get_wikipedia_dblist(spark, dblist_file):
     """Return a set of Wikipedias from a file.
     Args:
@@ -438,6 +512,7 @@ def get_wikipedia_dblist(spark, dblist_file):
     return set([x[0].strip() for x in dblist])
 
 
+@timeit
 def validate_cmd_options(spark, options):
     """Validate command line options passed by the user.
     Args:
@@ -465,18 +540,24 @@ def validate_cmd_options(spark, options):
     return True
 
 
+@timeit
+def get_spark_session(app_name):
+    return SparkSession\
+        .builder\
+        .appName(app_name)\
+        .enableHiveSupport()\
+        .getOrCreate()
+
+
+@timeit
 def main():
     """Main entry point of the script.
     Parses command line options, trains models, and makes predictions.
     """
     options = get_cmd_options()
-    spark = SparkSession\
-        .builder\
-        .appName(options.spark_app_name)\
-        .enableHiveSupport()\
-        .getOrCreate()
+    spark = get_spark_session(options.spark_app_name)
     if validate_cmd_options(spark, options):
-        print(options)
+        log('Options: %s' % str(options), 'debug')
         normalized_scores = NormalizedScores(
             spark,
             options.source_language,
@@ -488,6 +569,10 @@ def main():
             options.tmp_dir
         )
         normalized_scores.train()
+
+        pp = pprint.PrettyPrinter(indent=4, width=72)
+        log('TIME LOG:', 'debug')
+        pp.pprint(TIME_LOG)
 
 
 if __name__ == '__main__':
