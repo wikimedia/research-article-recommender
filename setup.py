@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="article-recommender",
-    version="0.0.1",
+    version="0.0.2",
     author="Bahodir Mansurov",
     author_email="bmansurov@wikimedia.org",
     description="Recommend Wikipedia articles for creation",
