@@ -5,7 +5,7 @@ from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.regression import RandomForestRegressor
 from pyspark.sql import functions as F, Window
 
-from util import csv_to_list, log, timeit
+from article_recommender.util import csv_to_list, log, timeit
 
 
 TRAIN_RANGE_DAYS = 180

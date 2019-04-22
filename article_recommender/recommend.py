@@ -16,8 +16,9 @@ import argparse
 from datetime import datetime
 import os.path
 
-from util import csv_to_list, get_spark_session, log, timeit
-from normalizedscores import NormalizedScores
+from article_recommender.util\
+    import csv_to_list, get_spark_session, log, timeit
+from article_recommender.normalizedscores import NormalizedScores
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
