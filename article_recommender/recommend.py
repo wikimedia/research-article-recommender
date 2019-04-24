@@ -46,7 +46,6 @@ intermediate and final output.
 """
 
 
-@timeit
 def get_cmd_options():
     """Return command line options passed to the script.
     Also apply defaults and transormations.

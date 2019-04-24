@@ -3,6 +3,14 @@ import time
 
 from pyspark.sql import SparkSession
 
+LOGGER = None
+
+
+def setup_logger(spark):
+    global LOGGER
+    log4jLogger = spark._jvm.org.apache.log4j
+    LOGGER = log4jLogger.LogManager.getLogger(__name__)
+
 
 def timeit(method):
     """Decorator for measuring running time of functions/methods."""
@@ -14,11 +22,11 @@ def timeit(method):
         args_str = str(args)
         kwargs_str = str(args)
 
-        print('*' * 72)
-        print('TIME LOG for %r: %s' % (method.__name__, diff))
-        print('Args: %s' % args_str)
-        print('Keyword args: %s' % kwargs_str)
-        print('*' * 72)
+        LOGGER.info('-' * 72)
+        LOGGER.info('TIME LOG for %r: %s' % (method.__name__, diff))
+        LOGGER.info('Args: %s' % args_str)
+        LOGGER.info('Keyword args: %s' % kwargs_str)
+        LOGGER.info('-' * 72)
 
         return result
     return timed
@@ -30,18 +38,27 @@ def log(message, type='info'):
       message (string)
       type (string)
     """
-    print('-' * 72)
-    print('%s: %s' % (type.upper(), message))
-    print('-' * 72)
+    LOGGER.info('-' * 72)
+    if type == 'debug':
+        LOGGER.debug(message)
+    elif type == 'warn':
+        LOGGER.warn(message)
+    elif type == 'error':
+        LOGGER.error(message)
+    else:
+        LOGGER.info(message)
+    LOGGER.info('-' * 72)
 
 
 @timeit
 def get_spark_session(app_name):
-    return SparkSession\
+    spark = SparkSession\
         .builder\
         .appName(app_name)\
         .enableHiveSupport()\
         .getOrCreate()
+    setup_logger(spark)
+    return spark
 
 
 @timeit
